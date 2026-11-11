@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>수업 발표 순서 추첨기</title>
+    <!-- Tailwind CSS (CDN) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0fdf4',
+                            100: '#dcfce7',
+                            500: '#22c55e',
+                            600: '#16a34a',
+                            700: '#15803d',
+                            900: '#14532d',
+                        }
+                    },
+                    animation: {
+                        'bounce-short': 'bounce 0.5s ease-in-out 1',
+                        'pulse-fast': 'pulse 0.4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+        body {
+            font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        /* 3D 효과 및 미세 shadow 효과 설정 */
+        .btn-3d {
+            transition: all 0.1s ease;
+            box-shadow: 0 6px 0 shadow-color, 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+        }
+        .btn-3d:active:not(:disabled) {
+            transform: translateY(4px);
+            box-shadow: 0 2px 0 shadow-color, 0 4px 6px -2px rgba(0, 0, 0, 0.2);
+        }
+        .number-card {
+            transition: transform 0.2s ease, background-color 0.3s ease;
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col justify-between overflow-x-hidden selection:bg-emerald-500 selection:text-white">
+
+    <!-- Config script runs first to expose global values -->
+    <script>
+        /* ==========================================================================
+           [선생님 설정 구역] - 나중에 바꿀 값은 이 밑의 숫자나 글자를 수정하세요!
+           ========================================================================== */
+        const CONFIG = {
+            // 전체 학생 수 (기본 28명)
+            TOTAL_STUDENTS: 28,
+            
+            // 화면 상단 제목
+            TITLE: "🎯 오늘의 발표자 추첨",
+            
+            // 화면 상단 서브타이틀
+            SUBTITLE: "공정하고 신나는 랜덤 번호 뽑기",
+            
+            // 롤링 애니메이션 지속 시간 (밀리초 단위, 1000 = 1초)
+            ANIMATION_DURATION: 1800,
+            
+            // 롤링 간격 (밀리초 단위, 값이 작을수록 빠르게 숫자 변함)
+            ROLLING_INTERVAL: 60,
+
+            // 웹 효과음 사용 여부 (Web Audio API 사용, 외부 파일 불필요)
+            ENABLE_SOUND: true
+        };
+    </script>
+
+    <!-- Header / Navbar -->
+    <header class="w-full bg-slate-800/80 backdrop-blur border-b border-slate-700/60 p-4 md:px-8 flex flex-wrap justify-between items-center shadow-md">
+        <div class="flex items-center gap-3">
+            <div class="bg-emerald-500 text-slate-900 font-extrabold text-2xl w-10 h-10 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/20">
+                🎲
+            </div>
+            <div>
+                <h1 id="app-title" class="text-xl md:text-2xl font-bold text-white tracking-tight">수업 발표자 추첨</h1>
+                <p id="app-subtitle" class="text-xs md:text-sm text-slate-400">공정하고 신나는 랜덤 번호 뽑기</p>
+            </div>
+        </div>
+
+        <div class="mt-2 sm:mt-0 flex items-center gap-4 bg-slate-900/60 px-4 py-2 rounded-xl border border-slate-700/50">
+            <div class="text-sm">
+                <span class="text-slate-400">남은 인원:</span>
+                <span id="remaining-count" class="font-extrabold text-emerald-400 text-lg ml-1">28</span>
+                <span class="text-slate-400">/ <span id="total-count">28</span>명</span>
+            </div>
+            <button id="sound-toggle" onclick="toggleSound()" class="text-xs px-2.5 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 transition" title="소리 켜기/끄기">
+                🔊 소리 ON
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="w-full max-w-6xl mx-auto p-4 md:p-6 flex-1 flex flex-col justify-center items-center gap-6">
+
+        <!-- Extra Large Display Box for Electronic Whiteboard -->
+        <div class="w-full max-w-2xl bg-gradient-to-b from-slate-800 to-slate-850 rounded-3xl p-6 md:p-10 border-2 border-slate-700 shadow-2xl flex flex-col items-center justify-center relative overflow-hidden">
+            <!-- Background Decorative Glow -->
+            <div id="glow-effect" class="absolute inset-0 bg-emerald-500/5 opacity-0 transition-opacity duration-500 pointer-events-none"></div>
+
+            <div class="text-xs md:text-sm font-semibold uppercase tracking-widest text-emerald-400 mb-2 px-3 py-1 bg-emerald-950/60 rounded-full border border-emerald-800/40">
+                <span id="status-badge">버튼을 눌러 발표자를 뽑으세요</span>
+            </div>
+
+            <!-- Giant Number Display -->
+            <div class="my-4 h-48 md:h-64 flex items-center justify-center w-full">
+                <span id="display-number" class="text-7xl sm:text-8xl md:text-9xl font-black text-slate-500 tracking-tighter drop-shadow-[0_10px_20px_rgba(0,0,0,0.5)] transition-all">
+                    ?
+                </span>
+            </div>
+
+            <!-- Primary Control Buttons -->
+            <div class="w-full flex flex-col sm:flex-row gap-4 justify-center items-center mt-2 z-10">
+                <button id="pick-btn" onclick="drawNumber()" class="w-full sm:w-2/3 py-4 md:py-5 px-8 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xl md:text-2xl transition duration-150 shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-3 group active:scale-95 disabled:opacity-50 disabled:pointer-events-none">
+                    <span>🎉 번호 뽑기</span>
+                    <span class="text-xs font-normal bg-slate-900/20 px-2 py-1 rounded-md group-hover:bg-slate-900/30">Space bar</span>
+                </button>
+                <button id="reset-btn" onclick="confirmReset()" class="w-full sm:w-1/3 py-4 md:py-5 px-6 rounded-2xl bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold text-lg md:text-xl transition duration-150 flex items-center justify-center gap-2 active:scale-95">
+                    🔄 다시 뽑기
+                </button>
+            </div>
+        </div>
+
+        <!-- Grid Status View of All Numbers -->
+        <div class="w-full bg-slate-800/60 border border-slate-700/80 rounded-2xl p-4 md:p-6 shadow-xl">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-sm md:text-base font-bold text-slate-300 flex items-center gap-2">
+                    📊 전체 번호 현황판
+                </h2>
+                <div class="flex items-center gap-4 text-xs">
+                    <div class="flex items-center gap-1.5">
+                        <span class="w-3 h-3 rounded-full bg-emerald-500/20 border border-emerald-500 inline-block"></span>
+                        <span class="text-slate-400">대기 중</span>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <span class="w-3 h-3 rounded-full bg-slate-700 border border-slate-600 inline-block"></span>
+                        <span class="text-slate-400">선택됨</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Number Grid Container -->
+            <div id="number-grid" class="grid grid-cols-4 sm:grid-cols-7 md:grid-cols-7 lg:grid-cols-14 gap-2 md:gap-3">
+                <!-- JavaScript will populate numbers here -->
+            </div>
+        </div>
+    </main>
+
+    <!-- Simple Footer -->
+    <footer class="w-full text-center py-3 text-xs text-slate-500 border-t border-slate-800">
+        중학교 수업용 전자칠판 맞춤 발표자 추첨기 | 단일 HTML 파일로 오프라인 동작 지원
+    </footer>
+
+    <!-- Custom Modal Dialog (Replaces Alert/Confirm) -->
+    <div id="modal-backdrop" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 max-w-md w-full shadow-2xl transform transition-all">
+            <h3 id="modal-title" class="text-xl font-bold text-white mb-2">처음부터 다시 뽑으시겠습니까?</h3>
+            <p id="modal-desc" class="text-sm text-slate-300 mb-6">지금까지 뽑힌 결과가 모두 초기화되고 모든 학생 번호가 다시 포함됩니다.</p>
+            <div class="flex justify-end gap-3">
+                <button onclick="closeModal()" class="px-5 py-2.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold text-sm transition">
+                    취소
+                </button>
+                <button id="modal-confirm-btn" onclick="executeReset()" class="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-semibold text-sm transition shadow-lg shadow-rose-600/30">
+                    초기화 실행
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Logic Script -->
+    <script>
+        // App State Variables
+        let remainingNumbers = [];
+        let pickedNumbers = [];
+        let isAnimating = false;
+        let audioCtx = null;
+        let isSoundEnabled = CONFIG.ENABLE_SOUND;
+
+        // Web Audio API Sound Effects (Offline Native Synthesis)
+        function playSound(type) {
+            if (!isSoundEnabled) return;
+            try {
+                if (!audioCtx) {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                if (audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                if (type === 'tick') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(400 + Math.random() * 200, audioCtx.currentTime);
+                    gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.05);
+                    osc.start();
+                    osc.stop(audioCtx.currentTime + 0.05);
+                } else if (type === 'win') {
+                    // Play fan-fare chord
+                    const freqs = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
+                    freqs.forEach((freq, idx) => {
+                        const winOsc = audioCtx.createOscillator();
+                        const winGain = audioCtx.createGain();
+                        winOsc.type = 'triangle';
+                        winOsc.frequency.setValueAtTime(freq, audioCtx.currentTime + idx * 0.08);
+                        winGain.gain.setValueAtTime(0.15, audioCtx.currentTime + idx * 0.08);
+                        winGain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + idx * 0.08 + 0.4);
+                        winOsc.connect(winGain);
+                        winGain.connect(audioCtx.destination);
+                        winOsc.start(audioCtx.currentTime + idx * 0.08);
+                        winOsc.stop(audioCtx.currentTime + idx * 0.08 + 0.4);
+                    });
+                }
+            } catch (e) {
+                // Audio Context fallback if blocked
+            }
+        }
+
+        // Initialize application on load
+        window.onload = function() {
+            // Apply text from CONFIG
+            document.getElementById('app-title').innerText = CONFIG.TITLE;
+            document.getElementById('app-subtitle').innerText = CONFIG.SUBTITLE;
+            document.getElementById('total-count').innerText = CONFIG.TOTAL_STUDENTS;
+            
+            initSystem();
+
+            // Keyboard shortcut support (Spacebar to draw)
+            window.addEventListener('keydown', function(e) {
+                if (e.code === 'Space') {
+                    e.preventDefault();
+                    if (!isAnimating) {
+                        drawNumber();
+                    }
+                }
+            });
+        };
+
+        function initSystem() {
+            remainingNumbers = Array.from({ length: CONFIG.TOTAL_STUDENTS }, (_, i) => i + 1);
+            pickedNumbers = [];
+            isAnimating = false;
+
+            document.getElementById('display-number').innerText = "?";
+            document.getElementById('display-number').className = "text-7xl sm:text-8xl md:text-9xl font-black text-slate-500 tracking-tighter drop-shadow-[0_10px_20px_rgba(0,0,0,0.5)] transition-all";
+            document.getElementById('status-badge').innerText = "버튼을 눌러 발표자를 뽑으세요";
+            document.getElementById('status-badge').className = "text-emerald-400";
+            document.getElementById('glow-effect').style.opacity = "0";
+
+            document.getElementById('pick-btn').disabled = false;
+            document.getElementById('pick-btn').classList.remove('opacity-50');
+
+            updateCounterDisplay();
+            renderGrid();
+        }
+
+        function updateCounterDisplay() {
+            document.getElementById('remaining-count').innerText = remainingNumbers.length;
+        }
+
+        // Render visual status grid of 1..N
+        function renderGrid() {
+            const gridContainer = document.getElementById('number-grid');
+            gridContainer.innerHTML = '';
+
+            for (let i = 1; i <= CONFIG.TOTAL_STUDENTS; i++) {
+                const card = document.createElement('div');
+                card.id = `num-card-${i}`;
+                const isPicked = pickedNumbers.includes(i);
+
+                card.className = `number-card py-2.5 rounded-xl font-black text-center text-sm sm:text-base border transition-all ${
+                    isPicked
+                        ? 'bg-slate-800 text-slate-600 border-slate-700/50 scale-95 opacity-50 line-through'
+                        : 'bg-slate-700/80 hover:bg-slate-600 text-emerald-400 border-slate-600 shadow-md cursor-pointer'
+                }`;
+
+                card.innerText = i;
+                
+                // Allow tapping individual available numbers if needed
+                card.onclick = function() {
+                    if (!isPicked && !isAnimating) {
+                        pickSpecificNumber(i);
+                    }
+                };
+
+                gridContainer.appendChild(card);
+            }
+        }
+
+        // Draw random unpicked number
+        function drawNumber() {
+            if (isAnimating) return;
+
+            if (remainingNumbers.length === 0) {
+                document.getElementById('status-badge').innerText = "모든 학생이 뽑혔습니다!";
+                document.getElementById('status-badge').className = "text-amber-400 font-bold";
+                return;
+            }
+
+            isAnimating = true;
+            document.getElementById('pick-btn').disabled = true;
+
+            const displayEl = document.getElementById('display-number');
+            const statusEl = document.getElementById('status-badge');
+            
+            statusEl.innerText = "추첨 진행 중...";
+            statusEl.className = "text-amber-400 animate-pulse";
+            displayEl.className = "text-7xl sm:text-8xl md:text-9xl font-black text-amber-400 tracking-tighter transition-all scale-105";
+
+            let startTime = Date.now();
+
+            // Slot machine / roulette rolling effect
+            const timer = setInterval(() => {
+                const randomVisualIndex = Math.floor(Math.random() * remainingNumbers.length);
+                displayEl.innerText = remainingNumbers[randomVisualIndex];
+                playSound('tick');
+
+                const elapsed = Date.now() - startTime;
+                if (elapsed >= CONFIG.ANIMATION_DURATION) {
+                    clearInterval(timer);
+                    finalizeSelection();
+                }
+            }, CONFIG.ROLLING_INTERVAL);
+        }
+
+        // Pick specific number directly (when clicked on grid)
+        function pickSpecificNumber(num) {
+            const index = remainingNumbers.indexOf(num);
+            if (index > -1) {
+                isAnimating = true;
+                document.getElementById('pick-btn').disabled = true;
+                
+                // Fast short roulette to chosen number
+                let count = 0;
+                const displayEl = document.getElementById('display-number');
+                const timer = setInterval(() => {
+                    displayEl.innerText = remainingNumbers[Math.floor(Math.random() * remainingNumbers.length)];
+                    playSound('tick');
+                    count++;
+                    if (count >= 8) {
+                        clearInterval(timer);
+                        finalizeSelection(num);
+                    }
+                }, 50);
+            }
+        }
+
+        // Finalize selection after animation completes
+        function finalizeSelection(forcedNum = null) {
+            let selectedIndex;
+            if (forcedNum !== null) {
+                selectedIndex = remainingNumbers.indexOf(forcedNum);
+            } else {
+                selectedIndex = Math.floor(Math.random() * remainingNumbers.length);
+            }
+
+            const chosenNumber = remainingNumbers[selectedIndex];
+
+            // Update state lists
+            remainingNumbers.splice(selectedIndex, 1);
+            pickedNumbers.push(chosenNumber);
+
+            // Update Big Display UI
+            const displayEl = document.getElementById('display-number');
+            const statusEl = document.getElementById('status-badge');
+            const glowEl = document.getElementById('glow-effect');
+
+            displayEl.innerText = chosenNumber;
+            displayEl.className = "text-8xl sm:text-9xl md:text-[11rem] font-black text-emerald-400 tracking-tighter transition-all animate-bounce-short drop-shadow-[0_0_35px_rgba(34,197,94,0.6)]";
+            
+            statusEl.innerText = `🎉 🎉 ${chosenNumber}번 학생 당첨! 🎉 🎉`;
+            statusEl.className = "text-emerald-300 font-extrabold text-base md:text-lg animate-pulse";
+
+            glowEl.style.opacity = "1";
+            setTimeout(() => { glowEl.style.opacity = "0"; }, 1200);
+
+            playSound('win');
+
+            // Update UI elements
+            updateCounterDisplay();
+            renderGrid();
+
+            // Highlight chosen grid cell
+            const pickedCard = document.getElementById(`num-card-${chosenNumber}`);
+            if (pickedCard) {
+                pickedCard.className = "number-card py-2.5 rounded-xl font-black text-center text-base border transition-all bg-emerald-500 text-slate-950 border-emerald-400 ring-4 ring-emerald-500/50 scale-110 z-10 shadow-lg";
+            }
+
+            isAnimating = false;
+            
+            if (remainingNumbers.length > 0) {
+                document.getElementById('pick-btn').disabled = false;
+            } else {
+                statusEl.innerText = "🎊 모든 번호가 완료되었습니다! 🎊";
+                document.getElementById('pick-btn').disabled = true;
+            }
+        }
+
+        // Toggle sound option
+        function toggleSound() {
+            isSoundEnabled = !isSoundEnabled;
+            const btn = document.getElementById('sound-toggle');
+            if (isSoundEnabled) {
+                btn.innerText = "🔊 소리 ON";
+                btn.className = "text-xs px-2.5 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 transition";
+            } else {
+                btn.innerText = "🔇 소리 OFF";
+                btn.className = "text-xs px-2.5 py-1 rounded-lg bg-rose-900/60 hover:bg-rose-800 text-rose-300 border border-rose-700/50 transition";
+            }
+        }
+
+        // Custom Modal Confirm for Reset
+        function confirmReset() {
+            if (isAnimating) return;
+            document.getElementById('modal-backdrop').classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('modal-backdrop').classList.add('hidden');
+        }
+
+        function executeReset() {
+            closeModal();
+            initSystem();
+        }
+    </script>
+</body>
+</html>
